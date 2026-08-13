@@ -2,7 +2,7 @@
 
 [English](README.md) | **中文**
 
-DeepSeek Harness 插件。通过 HTTP 调用正在运行的 [PowerContext](https://github.com/oceanbase/powercontext) Server，把项目记忆、任务交接、经验和技能接到 Agent 循环中。本仓库不嵌入存储、不启动 Server，也不 `import` Python 包。
+DeepSeek Harness 插件：通过 HTTP 接入正在运行的 [PowerContext](https://github.com/oceanbase/powercontext) Server，覆盖召回、记忆、交接、经验与技能。本仓库不嵌入存储、不启动 Server，也不 `import` Python 包。
 
 ```bash
 dsh plugin --profile web add <path-or-tarball>

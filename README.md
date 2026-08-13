@@ -2,7 +2,7 @@
 
 **English** | [中文](README.zh.md)
 
-A DeepSeek Harness plugin that talks to a running [PowerContext](https://github.com/oceanbase/powercontext) Server over HTTP. It wires project memory, handoff, experience, and skills into the agent loop. It does not embed storage, start the Server, or import the Python package.
+DeepSeek Harness plugin that connects to a running [PowerContext](https://github.com/oceanbase/powercontext) Server over HTTP for recall, memory, handoff, experience, and skills. It does not embed storage, start the Server, or import the Python package.
 
 ```bash
 dsh plugin --profile web add <path-or-tarball>
