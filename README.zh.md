@@ -59,8 +59,10 @@ curl http://127.0.0.1:8000/health/ready
 **GitHub Release（推荐）** — 下载 `powercontext-dsh-*.tgz`：
 
 ```bash
-dsh plugin --profile web add ./powercontext-dsh-0.1.0.tgz
+dsh plugin --profile web add ./powercontext-dsh-0.0.2.tgz
 ```
+
+若之前是用源码目录装的，先卸载再装 tarball。Windows 上把 `link:` 安装直接换成 tarball 会失败：pnpm 会去重建嵌套 `node_modules` 的 symlink。
 
 Release 的下载 URL 同样可用。
 

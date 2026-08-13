@@ -59,8 +59,10 @@ Install DeepSeek Harness first and make sure the web profile exists (run `dsh we
 **GitHub Release (recommended).** Download `powercontext-dsh-*.tgz`:
 
 ```bash
-dsh plugin --profile web add ./powercontext-dsh-0.1.0.tgz
+dsh plugin --profile web add ./powercontext-dsh-0.0.2.tgz
 ```
+
+If the plugin is already installed from a source checkout, remove it first. On Windows, replacing a `link:` install with a tarball fails because pnpm tries to recreate nested `node_modules` symlinks.
 
 A Release download URL works the same way.
 

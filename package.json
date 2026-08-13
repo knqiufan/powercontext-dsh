@@ -1,6 +1,6 @@
 {
   "name": "powercontext-dsh",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "DeepSeek Harness plugin that connects to a PowerContext Server over HTTP for recall, memory, handoff, experience, and skills.",
   "license": "Apache-2.0",
   "type": "module",
@@ -36,7 +36,7 @@
     "build": "node scripts/gen-operations.mjs && tsdown",
     "prepare": "node scripts/prepare.mjs",
     "test": "vitest run",
-    "pack:release": "pnpm build && pnpm pack"
+    "pack:release": "pnpm build && node scripts/pack-release.mjs"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "*",
