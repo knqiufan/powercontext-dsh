@@ -2,156 +2,126 @@
 
 **English** | [中文](README.zh.md)
 
-A DeepSeek Harness bundle that talks to a running [PowerContext](https://github.com/oceanbase/powercontext) Server over HTTP. It does not embed storage, start the Server, or import the Python package.
+A DeepSeek Harness plugin that talks to a running [PowerContext](https://github.com/oceanbase/powercontext) Server over HTTP. It wires project memory, handoff, experience, and skills into the agent loop. It does not embed storage, start the Server, or import the Python package.
 
-You do not need `/pc` or the word “remember” in ordinary chat. `/pc` is a human command for diagnostics and Candidate review.
-
-```bat
+```bash
 dsh plugin --profile web add <path-or-tarball>
 ```
 
-## What it does
+## Features
 
-Before each model step the plugin:
+The plugin calls the Server’s `/v1/...` OpenAPI surface over HTTP. It does not use MCP.
+
+Before each model step it automatically:
 
 1. **Recalls** bounded context with `POST /v1/context/prepare` and injects it as untrusted historical evidence.
-2. **Captures** the current user prompt as a Content Source with `POST /v1/sources/content`.
+2. **Captures** the current user input as a Content Source with `POST /v1/sources/content`.
 
-Named `pc_*` tools cover Memory, Handoff, Source, and read/generate paths. `pc_call` reaches every OpenAPI `operationId`. Skill `project-context` documents the same workflow for the model.
+Named `pc_*` tools cover the common paths. Everything else is reachable through `pc_call` by OpenAPI `operationId`. Skill `project-context` documents the same workflow for the model. If the Server is unreachable, recall is skipped and the turn continues.
 
-| What you do | What happens immediately | Available in a later session |
+| Area | Tools | HTTP |
 |---|---|---|
-| Ordinary chat (“switch auth to JWT”) | The prompt is stored as a Source | Yes if Server extraction is enabled, or if you ask to persist it |
-| Ask to persist a decision | The model calls `pc_remember` | Yes; extraction is not required |
-| Continue work and ask about an old decision | `prepare_context` injects matches; the model may also search | Only if that project scope already has Memory |
+| Memory | `pc_search` `pc_remember` `pc_memory_list` `pc_memory_get` `pc_memory_revise` `pc_memory_retire` | `/v1/memory/*` |
+| Context | `pc_prepare_context` `pc_capture_source` | `/v1/context/prepare`, `/v1/sources/content` |
+| Handoff | `pc_handoff_activate` `pc_handoff_prepare` `pc_handoff_finalize` `pc_handoff_commit` `pc_handoff_continue` | `/v1/handoff/*` |
+| Experience / Skill | `pc_experience_generate` `pc_experience_get` `pc_skill_generate` `pc_skill_get` | `/v1/experience/*`, `/v1/skill/*` |
+| Review | `pc_review_list` `pc_review_get` | `/v1/artifact-candidates/*` |
+| Everything else | `pc_call` | All `operationId`s (health, stats, external skills, handoff reports, …) |
 
-Explicit Memory writes work without an inference model. “Chat is enough to remember” is true only when Server extraction is configured.
+See [`openapi/powercontext.yaml`](openapi/powercontext.yaml) for the full contract.
 
-## Install
+## Quick start
 
 PowerContext Server and DeepSeek Harness are two processes. Both are required.
 
-### 1. Start PowerContext Server
+### Start the Server
 
-```bat
+```bash
 uv tool install "powercontext[cli,server] @ git+https://github.com/oceanbase/powercontext.git@master"
 powercontext server run
 ```
 
 From a PowerContext checkout you can use `uv run powercontext server run` instead.
 
-Defaults:
+Defaults: `http://127.0.0.1:8000`, no authentication, SQLite under the user data directory (`POWERCONTEXT_HOME` overrides it).
 
-- `http://127.0.0.1:8000`
-- no authentication
-- SQLite under the user data directory (`POWERCONTEXT_HOME` overrides it)
-- no automatic Memory extraction; explicit writes still work
-
-Check from another terminal:
-
-```bat
+```bash
 curl http://127.0.0.1:8000/health/live
 curl http://127.0.0.1:8000/health/ready
 ```
 
 `live` must succeed. `ready` may be `degraded` when inference is not configured.
 
-### 2. Start DeepSeek Harness once
+### Install the plugin
 
-Run `dsh web` (or `pnpm dsh web` from a Harness checkout) once so `$DSH_HOME/profiles` exists. You can quit afterward.
+Install DeepSeek Harness first and make sure the web profile exists (run `dsh web` once).
 
-### 3. Add this plugin to the web profile
+**GitHub Release (recommended).** Download `powercontext-dsh-*.tgz`:
 
-The install loads built `lib/`, not TypeScript sources.
-
-**Release tarball (recommended).** Download `powercontext-dsh-*.tgz` from GitHub Releases:
-
-```bat
-dsh plugin --profile web add C:\path\to\powercontext-dsh-0.1.0.tgz
+```bash
+dsh plugin --profile web add ./powercontext-dsh-0.1.0.tgz
 ```
 
 A Release download URL works the same way.
 
-**Source checkout.** `lib/` is committed, so you can add the clone without building:
+**Source checkout:**
 
-```bat
-dsh plugin --profile web add C:\path\to\powercontext-dsh
+```bash
+dsh plugin --profile web add /path/to/powercontext-dsh
 ```
 
-Rebuild only after you change TypeScript: `pnpm install`, `pnpm test`, `pnpm build`, then restart `dsh web`.
+Rebuild after TypeScript changes: `pnpm install`, `pnpm test`, `pnpm build`, then restart `dsh web`.
 
 **npm (after publish):**
 
-```bat
+```bash
 dsh plugin --profile web add powercontext-dsh
 ```
 
 `uv` / `powercontext` do not install this plugin into Harness.
 
-Optional check (`--dump-config` prints the composed tree and exits; it does not start the app):
+Optional check:
 
-```bat
+```bash
 dsh --profile web --dump-config
 ```
 
-The dump must contain `# == powercontext-dsh` and `id: powercontext-dsh`. Day-to-day use is `dsh web`, not `--dump-config`.
-
-The plugin resolves `@deepseek-ai/dsh-tools` and `@deepseek-ai/dsh-llm` from the Harness checkout, then from `$DSH_HOME/profiles/node_modules`. Run Harness once before the first plugin add if those imports fail.
-
-### 4. Open a project workspace
-
-1. Keep `powercontext server run` in one terminal.
-2. Start `dsh web`. Configure `baseUrl` first if the Server is remote.
-3. Create a session whose workspace is **the Git repository you are developing**, not the Harness source tree (unless you are actually changing Harness).
-
-Then talk normally. Optional self-check:
-
-```text
-/pc
-/pc doctor
-```
-
-`/pc` prints the current `scope` and `baseUrl`. Two sessions share Memory only when `scope` matches.
+The dump should contain `id: powercontext-dsh`.
 
 Remove the plugin:
 
-```bat
+```bash
 dsh plugin --profile web remove powercontext-dsh
 ```
 
-## Remote PowerContext Server
+### Use it
 
-The plugin runs inside the **Harness Host** (the Node process that serves `dsh web`). The browser never calls PowerContext, so CORS is irrelevant. The machine running Harness must reach the Server URL.
+Keep the Server running, then:
 
-### Server
-
-The default bind is `127.0.0.1` and is not reachable from other hosts. A remote Server must listen more widely and enable auth. Plain HTTP is for loopback; put TLS in front (Nginx, Caddy, …) before exposing it on a network.
-
-```bat
-set POWERCONTEXT_SERVER_HTTP_HOST=0.0.0.0
-set POWERCONTEXT_SERVER_HTTP_PORT=8000
-set POWERCONTEXT_SERVER_AUTH_ENABLED=true
-set POWERCONTEXT_SERVER_AUTH_TOKEN=a-long-random-secret
-powercontext server run
-```
-
-Publish the API root users actually use, for example `https://pc.example.com`. No trailing slash, and no `/mcp`. This plugin uses OpenAPI (`/v1/...`), not MCP.
-
-### Plugin `baseUrl`
-
-The default is `http://127.0.0.1:8000`. Environment variables override patch config. Do not put secrets in files `--dump-config` can print.
-
-PowerShell, before starting Harness:
-
-```powershell
-$env:POWERCONTEXT_DSH_BASE_URL = "https://pc.example.com"
-$env:POWERCONTEXT_DSH_AUTHORIZATION = "Bearer a-long-random-secret"
+```bash
 dsh web
 ```
 
-`POWERCONTEXT_DSH_AUTHORIZATION` must be the full `Bearer <token>` and must match `POWERCONTEXT_SERVER_AUTH_TOKEN`.
+Open a project and chat as you normally would. The plugin recalls context and stores user input in the background. When the model needs to read or write memory, hand off work, or generate experience / skills, it calls the corresponding `pc_*` tools.
 
-For a durable non-secret default, edit `%USERPROFILE%\.dsh\profiles\web\cordis.patch.yml` (or `~/.dsh/profiles/web/cordis.patch.yml`). Harness **replaces the whole `config` object** for that row, so restate every key you still need:
+You can type `/pc doctor` in the chat to check that the Server is reachable.
+
+## Configuration
+
+Environment variables override patch config. Do not put secrets in files that `--dump-config` can print.
+
+| Field | Environment variable | Default | Meaning |
+|---|---|---|---|
+| `baseUrl` | `POWERCONTEXT_DSH_BASE_URL` | `http://127.0.0.1:8000` | Server root URL, no trailing slash |
+| `authorization` | `POWERCONTEXT_DSH_AUTHORIZATION` | empty | Full `Bearer <token>` |
+| `scopeId` | `POWERCONTEXT_DSH_SCOPE_ID` | empty | Overrides automatic project scope |
+| `timeoutMs` | — | `4000` | Shared recall + capture budget |
+| `requestTimeoutMs` | — | `1000` | Single HTTP timeout |
+| `maxBytes` | — | `8000` | `prepare_context` budget |
+| `capturePrompts` | `POWERCONTEXT_DSH_CAPTURE_PROMPTS` | `true` | Persist user input as a Source |
+| `flushOnCapture` | `POWERCONTEXT_DSH_FLUSH_ON_CAPTURE` | `false` | Flush immediately after capture |
+
+For durable non-secret defaults, edit `~/.dsh/profiles/web/cordis.patch.yml`. Harness **replaces the whole `config` object** for that row, so restate every key you still need:
 
 ```yaml
 - id: powercontext-dsh
@@ -164,34 +134,29 @@ For a durable non-secret default, edit `%USERPROFILE%\.dsh\profiles\web\cordis.p
     flushOnCapture: false
 ```
 
-Restart `dsh web`. Confirm with `/pc` or `--dump-config`. Keep the token in `POWERCONTEXT_DSH_AUTHORIZATION` only.
+### Remote Server
 
-## Configuration
+The plugin runs inside the Harness process. The browser never calls PowerContext. The default Server bind is `127.0.0.1`. A remote Server must listen more widely and enable auth. Put TLS in front before exposing it on a network.
 
-Patch defaults:
+```bash
+export POWERCONTEXT_SERVER_HTTP_HOST=0.0.0.0
+export POWERCONTEXT_SERVER_HTTP_PORT=8000
+export POWERCONTEXT_SERVER_AUTH_ENABLED=true
+export POWERCONTEXT_SERVER_AUTH_TOKEN=<long-random-secret>
+powercontext server run
+```
 
-| Field | Default | Meaning |
-|---|---|---|
-| `baseUrl` | `http://127.0.0.1:8000` | Server root, no trailing slash |
-| `authorization` | empty | Full `Bearer <token>`; omitted when empty |
-| `scopeId` | empty | Overrides automatic project scope |
-| `timeoutMs` | 4000 | Shared recall + capture budget |
-| `requestTimeoutMs` | 1000 | Single HTTP timeout |
-| `maxBytes` | 8000 | `prepare_context` budget |
-| `capturePrompts` | true | Persist the user prompt as a Source |
-| `flushOnCapture` | false | Flush after capture; tests only |
+Publish the API root users actually use, for example `https://pc.example.com`. No trailing slash, and no `/mcp`.
 
-Plugin environment (Harness process):
+```bash
+export POWERCONTEXT_DSH_BASE_URL=https://pc.example.com
+export POWERCONTEXT_DSH_AUTHORIZATION="Bearer <long-random-secret>"
+dsh web
+```
 
-| Variable | Meaning |
-|---|---|
-| `POWERCONTEXT_DSH_BASE_URL` | Server root URL, no trailing slash |
-| `POWERCONTEXT_DSH_AUTHORIZATION` | Full `Bearer <token>` |
-| `POWERCONTEXT_DSH_SCOPE_ID` | Overrides derived project scope |
-| `POWERCONTEXT_DSH_CAPTURE_PROMPTS` | `false` skips storing the user prompt |
-| `POWERCONTEXT_DSH_FLUSH_ON_CAPTURE` | Flush after capture; off by default |
+`POWERCONTEXT_DSH_AUTHORIZATION` must be the full `Bearer <token>` and must match `POWERCONTEXT_SERVER_AUTH_TOKEN`. Keep the token in the environment variable, not in the patch file.
 
-Server environment (common):
+Common Server variables:
 
 | Variable | Meaning |
 |---|---|
@@ -201,111 +166,19 @@ Server environment (common):
 | `POWERCONTEXT_SERVER_RUNTIME_SCHEDULE_SECONDS` | Extraction interval; unset disables the job |
 | `POWERCONTEXT_SERVER_INFERENCE_GENERATION_MODEL` | Generation model used for extraction |
 
-The Settings UI cannot edit this plugin’s `baseUrl`. Use env or the profile patch above.
-
-## Scope
-
-Memory is per **scope**, not “everything this Harness user ever said”.
-
-1. Take the session workspace (the directory chosen in the Web UI): `agent.session.header.cwd`.
-2. Read `git remote origin` in that directory.
-3. Normalize to `git:host/path`, for example `git:github.com/oceanbase/powercontext`.
-4. If there is no usable remote, use `local:` plus a hash of the repository root.
-
-This is **not** the directory where you launched `dsh web`. You can start the CLI from the Harness checkout and still open a different project as the workspace; scope follows the workspace.
-
-- Same repository, two sessions → same scope → recall works.
-- Session A in repo A, session B in repo B → different scopes → B cannot search A’s Memory. That is isolation, not a bug.
-- `POWERCONTEXT_DSH_SCOPE_ID` forces one id for every session. Avoid it unless you intend to mix projects.
-
-If cross-session search is empty, run `/pc` in both sessions and compare `scope=` before assuming a write failed.
-
-## Everyday use
-
-Do not use `/pc remember …` as daily speech. That is a control experiment.
-
-### Persist a decision, ask tomorrow
-
-In your product repository, session 1:
-
-> Drop session cookies for login. Use JWT only. Put the refresh token in an HttpOnly cookie. Follow this for later API changes.
-
-If you need it in a new session **now**, add a normal sentence (still not `/pc`):
-
-> Save this auth decision in project memory so later sessions can use it.
-
-A successful `pc_remember` (or equivalent) tool call is the write. A spoken “I’ll remember that” with no tool call does not create Server Memory.
-
-Close session 1. Open session 2 in the **same workspace**:
-
-> What login scheme did we choose for this project? Use project memory. Don’t guess.
-
-Pass: JWT / HttpOnly, preferably with automatic injection or `pc_search` / `pc_prepare_context`.
-
-### Chat only, no “save this”
-
-Requires a generation model **and** `POWERCONTEXT_SERVER_RUNTIME_SCHEDULE_SECONDS` on the Server. Talk about the work in session 1 without mentioning PowerContext. After extraction runs, ask about yesterday’s constraints in session 2.
-
-Without extraction, do not treat this scenario as a plugin failure. Sources may exist while Memory does not.
-
-### Continue unfinished work
-
-Session 1:
-
-> Payment-callback signature verification is blocked on WeChat platform-certificate rotation. Continue from here tomorrow.
-
-Session 2:
-
-> Continue payment-callback signature verification from where we stopped.
-
-If Memory is present, the model should carry “certificate rotation” forward instead of starting from zero.
-
-### Server down, coding still works
-
-Stop `powercontext server run` and give Harness an ordinary coding task. Recall must skip. If the model still calls `pc_*`, it should get an unavailable result and continue, not stall the turn.
-
-## `/pc` commands
-
-| Command | Purpose |
-|---|---|
-| `/pc` | Show current scope and baseUrl |
-| `/pc doctor` | Server liveness / readiness |
-| `/pc search …` | Search Memory without the model |
-| `/pc remember …` | Write Memory without the model |
-| `/pc review` | List pending Candidates |
-| `/pc review approve / reject` | Approve or reject; do not let the model approve silently |
-| `/pc stats` / `/pc capabilities` | Diagnostics |
-
-Command results render in the UI and **never** enter model history. Headless has no slash-command adapter.
-
-## Settings → Plugins
-
-This is a Harness product split, not a failed install.
-
-- **Plugin configuration** ships three cards only: Shell, Agent loop, Web search. This bundle has no card there.
-- **Plugin list** is the live Loader inventory. Search for `powercontext`; the row is `powercontext-dsh`.
-
-Whether the plugin works is `/pc doctor`, tool calls, and cross-session recall — not a settings card.
-
-## Fail-open
-
-An unreachable Server skips recall, returns `{ ok: false, code: "unavailable" }` from tools, and never rejects the user turn. Diagnostics log operation id, status, byte count, and outcome — never query, content, citation, or authorization.
-
-Do not store secrets, API keys, or private key material in Memory or Sources.
-
 ## Development
 
-HTTP operations are generated from the vendored [`openapi/powercontext.yaml`](openapi/powercontext.yaml). Update that file (or set `POWERCONTEXT_OPENAPI`) and run `pnpm build` when the Server contract changes.
+HTTP operations are generated from [`openapi/powercontext.yaml`](openapi/powercontext.yaml). Update that file (or set `POWERCONTEXT_OPENAPI`) and run `pnpm build` when the Server contract changes.
 
-```bat
+```bash
 pnpm install
 pnpm test
 pnpm build
 ```
 
-- Push to `main` / `master`: `pnpm test` then `pnpm build`, and check that `lib/` plus the generated table are committed.
+- Push to `main` / `master`: run `pnpm test` and `pnpm build`, and check that `lib/` plus the generated table are committed.
 - Pull requests: `pnpm test` only.
-- GitHub Release is manual: Actions → **Release** → Run workflow → version such as `0.1.0`. The asset is `powercontext-dsh-X.Y.Z.tgz`. The workflow needs `contents: write` (default `GITHUB_TOKEN` is enough).
+- GitHub Release is manual: Actions → **Release** → Run workflow → version such as `0.1.0`. The asset is `powercontext-dsh-X.Y.Z.tgz`.
 
 ## License
 
