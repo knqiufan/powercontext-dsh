@@ -1,6 +1,6 @@
 {
   "name": "powercontext-dsh",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "DeepSeek Harness plugin that connects to a PowerContext Server over HTTP for recall, memory, handoff, experience, and skills.",
   "license": "Apache-2.0",
   "type": "module",

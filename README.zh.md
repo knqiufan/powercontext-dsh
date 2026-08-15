@@ -65,7 +65,7 @@ dsh plugin --profile web add /path/to/powercontext/integrations/dsh/plugins/powe
 本仓库继续作为发布通道。GitHub Release 的 tarball 仍然可用：
 
 ```bash
-dsh plugin --profile web add ./powercontext-dsh-0.0.2.tgz
+dsh plugin --profile web add ./powercontext-dsh-0.0.3.tgz
 ```
 
 若之前是用源码目录装的，先卸载再装 tarball。Windows 上把 `link:` 安装直接换成 tarball 会失败：pnpm 会去重建嵌套 `node_modules` 的 symlink。
