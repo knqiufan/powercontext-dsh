@@ -17,7 +17,7 @@ Before each model step it automatically:
 1. **Recalls** bounded context with `POST /v1/context/prepare` and injects it as untrusted historical evidence.
 2. **Captures** the current user input as a Content Source with `POST /v1/sources/content`.
 
-Named `pc_*` tools cover the common paths. Everything else is reachable through `pc_call` by OpenAPI `operationId`. Skill `project-context` documents the same workflow for the model. If the Server is unreachable, recall is skipped and the turn continues.
+Named `pc_*` tools expose the agent-safe Memory, handoff, experience, skill, and read-only review operations. DSH requests one-time user approval before named mutations run. Review mutations remain explicit human `/pc review` commands; destructive and administrative OpenAPI operations are not model tools. Skill `project-context` documents the same workflow for the model. If the Server is unreachable, recall is skipped and the turn continues.
 
 | Area | Tools | HTTP |
 |---|---|---|
@@ -26,22 +26,73 @@ Named `pc_*` tools cover the common paths. Everything else is reachable through 
 | Handoff | `pc_handoff_activate` `pc_handoff_prepare` `pc_handoff_finalize` `pc_handoff_commit` `pc_handoff_continue` | `/v1/handoff/*` |
 | Experience / Skill | `pc_experience_generate` `pc_experience_get` `pc_skill_generate` `pc_skill_get` | `/v1/experience/*`, `/v1/skill/*` |
 | Review | `pc_review_list` `pc_review_get` | `/v1/artifact-candidates/*` |
-| Everything else | `pc_call` | All `operationId`s (health, stats, external skills, handoff reports, …) |
 
 See [`openapi/powercontext.yaml`](openapi/powercontext.yaml) for the full contract.
 
 ## Quick start
 
-PowerContext Server and DeepSeek Harness are two processes. Both are required.
+PowerContext Server and DeepSeek Harness are two processes. Both are required. Use the same Git ref for the Server and the plugin.
+
+### Install the Server
+
+```bash
+uv tool install "powercontext[cli,server] @ git+https://github.com/oceanbase/powercontext.git@master"
+powercontext --version
+```
+
+From a PowerContext checkout you can use `uv run powercontext server run` instead.
+
+### Install the plugin
+
+Install DeepSeek Harness first and make sure the web profile exists (run `dsh web` once). From a PowerContext checkout the plugin lives at `integrations/dsh/plugins/powercontext`. Prefer the CLI so the ref stays aligned:
+
+```bash
+powercontext setup dsh --source oceanbase/powercontext --ref master
+```
+
+A local checkout works the same way:
+
+```bash
+powercontext setup dsh --source /path/to/powercontext
+```
+
+`setup dsh` calls `dsh plugin --profile web add` on that plugin directory. If the CLI is not available yet, add the directory yourself:
+
+```bash
+dsh plugin --profile web add /path/to/powercontext/integrations/dsh/plugins/powercontext
+```
+
+This standalone repository remains a release channel. A GitHub Release tarball still works:
+
+```bash
+dsh plugin --profile web add ./powercontext-dsh-0.0.2.tgz
+```
+
+If the plugin is already installed from a source checkout, remove it first. On Windows, replacing a `link:` install with a tarball fails because pnpm tries to recreate nested `node_modules` symlinks.
+
+Rebuild after TypeScript changes: `pnpm install`, `pnpm test`, `pnpm build`, then restart `dsh web`.
+
+Optional check:
+
+```bash
+powercontext doctor
+powercontext doctor dsh
+dsh --profile web --dump-config
+```
+
+`doctor` checks the Server. `doctor dsh` checks that the `dsh` CLI is on PATH and the plugin id is `powercontext-dsh`.
+
+Remove the plugin:
+
+```bash
+dsh plugin --profile web remove powercontext-dsh
+```
 
 ### Start the Server
 
 ```bash
-uv tool install "powercontext[cli,server] @ git+https://github.com/oceanbase/powercontext.git@master"
 powercontext server run
 ```
-
-From a PowerContext checkout you can use `uv run powercontext server run` instead.
 
 Defaults: `http://127.0.0.1:8000`, no authentication, SQLite under the user data directory (`POWERCONTEXT_HOME` overrides it).
 
@@ -50,51 +101,7 @@ curl http://127.0.0.1:8000/health/live
 curl http://127.0.0.1:8000/health/ready
 ```
 
-`live` must succeed. `ready` may be `degraded` when inference is not configured.
-
-### Install the plugin
-
-Install DeepSeek Harness first and make sure the web profile exists (run `dsh web` once).
-
-**GitHub Release (recommended).** Download `powercontext-dsh-*.tgz`:
-
-```bash
-dsh plugin --profile web add ./powercontext-dsh-0.0.2.tgz
-```
-
-If the plugin is already installed from a source checkout, remove it first. On Windows, replacing a `link:` install with a tarball fails because pnpm tries to recreate nested `node_modules` symlinks.
-
-A Release download URL works the same way.
-
-**Source checkout:**
-
-```bash
-dsh plugin --profile web add /path/to/powercontext-dsh
-```
-
-Rebuild after TypeScript changes: `pnpm install`, `pnpm test`, `pnpm build`, then restart `dsh web`.
-
-**npm (after publish):**
-
-```bash
-dsh plugin --profile web add powercontext-dsh
-```
-
-`uv` / `powercontext` do not install this plugin into Harness.
-
-Optional check:
-
-```bash
-dsh --profile web --dump-config
-```
-
-The dump should contain `id: powercontext-dsh`.
-
-Remove the plugin:
-
-```bash
-dsh plugin --profile web remove powercontext-dsh
-```
+`live` must succeed. `ready` may be `degraded` when inference is not configured. Explicit Memory writes do not need a model.
 
 ### Use it
 
@@ -170,16 +177,20 @@ Common Server variables:
 
 ## Development
 
-HTTP operations are generated from [`openapi/powercontext.yaml`](openapi/powercontext.yaml). Update that file (or set `POWERCONTEXT_OPENAPI`) and run `pnpm build` when the Server contract changes.
+HTTP operations are generated from PowerContext's `openapi/powercontext.yaml`. Point `POWERCONTEXT_ROOT` or `POWERCONTEXT_OPENAPI` at a checkout, then run `pnpm gen`. `pnpm gen:check` fails when `src/operations.generated.ts` has drifted.
 
 ```bash
 pnpm install
+pnpm gen:check
 pnpm test
+pnpm test:e2e
 pnpm build
 ```
 
+`pnpm test:e2e` starts a local Server from `POWERCONTEXT_ROOT` and calls liveness, readiness, remember, search, prepare, and capture. It does not start DeepSeek Harness and does not need a model.
+
 - Push to `main` / `master`: run `pnpm test` and `pnpm build`, and check that `lib/` plus the generated table are committed.
-- Pull requests: `pnpm test` only.
+- Pull requests: `pnpm test` and `pnpm gen:check`.
 - GitHub Release is manual: Actions → **Release** → Run workflow → version such as `0.1.0`. The asset is `powercontext-dsh-X.Y.Z.tgz`.
 
 ## License

@@ -44,7 +44,11 @@ declare module '@deepseek-ai/dsh-llm' {
 
 declare module '@deepseek-ai/dsh-session' {
   export type UserMessage = {
-    content: Array<{ type: string; text?: string }>
+    readonly content: ReadonlyArray<{ readonly type: string; readonly text?: string }>
+    readonly source: {
+      readonly kind: string
+      readonly [key: string]: unknown
+    }
   }
 }
 

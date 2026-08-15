@@ -33,9 +33,12 @@
   "scripts": {
     "sync:openapi": "node scripts/sync-openapi.mjs",
     "gen": "node scripts/gen-operations.mjs",
+    "gen:check": "node scripts/gen-operations.mjs --check",
     "build": "node scripts/gen-operations.mjs && tsdown",
     "prepare": "node scripts/prepare.mjs",
-    "test": "vitest run",
+    "test": "vitest run --exclude tests/e2e/**",
+    "test:e2e": "vitest run tests/e2e",
+    "test:all": "vitest run",
     "pack:release": "pnpm build && node scripts/pack-release.mjs"
   },
   "peerDependencies": {

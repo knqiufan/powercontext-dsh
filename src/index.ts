@@ -1,5 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { PowerContextClient } from './client.ts'
+import { combineSignals, PowerContextClient } from './client.ts'
 import { registerCommands } from './commands.ts'
 import { resolveConfig, type PluginConfig } from './config.ts'
 import { PLUGIN_NAME } from './errors.ts'
@@ -67,29 +67,23 @@ function registerRecall(ctx: Context, runtime: PluginRuntime, createUserMessage:
     signal: AbortSignal
   }, next: () => Promise<{ kind: string; messages?: unknown[] }>) => {
     const deadline = AbortSignal.timeout(runtime.config.timeoutMs)
-    const signal = typeof AbortSignal.any === 'function'
-      ? AbortSignal.any([payload.signal, deadline])
-      : payload.signal
-    try {
-      return await runRecallPreStep({
-        messages: payload.messages,
-        next,
-        cwd: payload.agent.session.header.cwd,
-        sessionId: payload.agent.session.header.id,
-        turnId: String(payload.turn),
-        signal,
-        client: runtime.client,
-        config: runtime.config,
-        resolveScope: runtime.resolveScope,
-        wrapContent: (text) => createUserMessage({
-          content: [{ type: 'text', text }],
-          source: { kind: 'plugin', plugin: PLUGIN_NAME },
-        }),
-        log: runtime.log,
-      })
-    } catch {
-      return next()
-    }
+    const signal = combineSignals([payload.signal, deadline])
+    return runRecallPreStep({
+      messages: payload.messages,
+      next,
+      cwd: payload.agent.session.header.cwd,
+      sessionId: payload.agent.session.header.id,
+      turnId: String(payload.turn),
+      signal,
+      client: runtime.client,
+      config: runtime.config,
+      resolveScope: runtime.resolveScope,
+      wrapContent: (text) => createUserMessage({
+        content: [{ type: 'text', text }],
+        source: { kind: 'plugin', plugin: PLUGIN_NAME },
+      }),
+      log: runtime.log,
+    })
   }) as never)
 }
 

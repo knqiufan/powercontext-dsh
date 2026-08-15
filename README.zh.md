@@ -17,7 +17,7 @@ dsh plugin --profile web add <path-or-tarball>
 1. **召回**：`POST /v1/context/prepare`，把有界上下文注入本轮（按不可信历史证据处理）。
 2. **捕获**：`POST /v1/sources/content`，把当前用户输入存成 Content Source。
 
-Agent 通过具名 `pc_*` 工具使用常用能力；其余 OpenAPI `operationId` 走 `pc_call`。同时注册 skill `project-context`。Server 不可达时跳过召回，不阻断当前对话。
+具名 `pc_*` 工具只暴露 Agent 可用的 Memory、交接、经验、技能和只读审核操作。写操作会先向用户做一次确认。审核变更仍走人类命令 `/pc review`；破坏性和管理类 OpenAPI 不会作为模型工具暴露。同时注册 skill `project-context`。Server 不可达时跳过召回，不阻断当前对话。
 
 | 能力 | 工具 | HTTP |
 |---|---|---|
@@ -26,22 +26,73 @@ Agent 通过具名 `pc_*` 工具使用常用能力；其余 OpenAPI `operationId
 | 交接 | `pc_handoff_activate` `pc_handoff_prepare` `pc_handoff_finalize` `pc_handoff_commit` `pc_handoff_continue` | `/v1/handoff/*` |
 | 经验 / 技能 | `pc_experience_generate` `pc_experience_get` `pc_skill_generate` `pc_skill_get` | `/v1/experience/*`、`/v1/skill/*` |
 | 审核 | `pc_review_list` `pc_review_get` | `/v1/artifact-candidates/*` |
-| 其余 | `pc_call` | 全部 `operationId`（健康检查、统计、外部 Skill、Handoff Report 等） |
 
 完整接口见 [`openapi/powercontext.yaml`](openapi/powercontext.yaml)。
 
 ## 快速开始
 
-需要同时运行 PowerContext Server 和 DeepSeek Harness。
+需要同时运行 PowerContext Server 和 DeepSeek Harness。Server 和插件使用同一个 Git ref。
+
+### 安装 Server
+
+```bash
+uv tool install "powercontext[cli,server] @ git+https://github.com/oceanbase/powercontext.git@master"
+powercontext --version
+```
+
+若本地已有 PowerContext 源码，可用 `uv run powercontext server run`。
+
+### 安装插件
+
+先安装 DeepSeek Harness，并确保 web profile 可用（执行一次 `dsh web` 即可）。PowerContext 仓库里的插件目录是 `integrations/dsh/plugins/powercontext`。优先用 CLI，这样 ref 会对齐：
+
+```bash
+powercontext setup dsh --source oceanbase/powercontext --ref master
+```
+
+本地 checkout 同样可以：
+
+```bash
+powercontext setup dsh --source /path/to/powercontext
+```
+
+`setup dsh` 内部会执行 `dsh plugin --profile web add`。如果还没有这条命令，也可以自己加目录：
+
+```bash
+dsh plugin --profile web add /path/to/powercontext/integrations/dsh/plugins/powercontext
+```
+
+本仓库继续作为发布通道。GitHub Release 的 tarball 仍然可用：
+
+```bash
+dsh plugin --profile web add ./powercontext-dsh-0.0.2.tgz
+```
+
+若之前是用源码目录装的，先卸载再装 tarball。Windows 上把 `link:` 安装直接换成 tarball 会失败：pnpm 会去重建嵌套 `node_modules` 的 symlink。
+
+改动 TypeScript 后需要 `pnpm install`、`pnpm test`、`pnpm build`，然后重启 `dsh web`。
+
+可选确认：
+
+```bash
+powercontext doctor
+powercontext doctor dsh
+dsh --profile web --dump-config
+```
+
+`doctor` 检查 Server。`doctor dsh` 检查 `dsh` 是否在 PATH 上，以及插件 id 是否为 `powercontext-dsh`。
+
+卸载：
+
+```bash
+dsh plugin --profile web remove powercontext-dsh
+```
 
 ### 启动 Server
 
 ```bash
-uv tool install "powercontext[cli,server] @ git+https://github.com/oceanbase/powercontext.git@master"
 powercontext server run
 ```
-
-若本地已有 PowerContext 源码，可用 `uv run powercontext server run`。
 
 默认监听 `http://127.0.0.1:8000`，无认证，数据在用户目录下的 SQLite（可用 `POWERCONTEXT_HOME` 覆盖）。
 
@@ -50,51 +101,7 @@ curl http://127.0.0.1:8000/health/live
 curl http://127.0.0.1:8000/health/ready
 ```
 
-`live` 必须成功。`ready` 在未配置推理模型时可以为 `degraded`。
-
-### 安装插件
-
-先安装 DeepSeek Harness，并确保 web profile 可用（执行一次 `dsh web` 即可）。
-
-**GitHub Release（推荐）** — 下载 `powercontext-dsh-*.tgz`：
-
-```bash
-dsh plugin --profile web add ./powercontext-dsh-0.0.2.tgz
-```
-
-若之前是用源码目录装的，先卸载再装 tarball。Windows 上把 `link:` 安装直接换成 tarball 会失败：pnpm 会去重建嵌套 `node_modules` 的 symlink。
-
-Release 的下载 URL 同样可用。
-
-**源码目录：**
-
-```bash
-dsh plugin --profile web add /path/to/powercontext-dsh
-```
-
-改动 TypeScript 后需要 `pnpm install`、`pnpm test`、`pnpm build`，然后重启 `dsh web`。
-
-**npm（发布后）：**
-
-```bash
-dsh plugin --profile web add powercontext-dsh
-```
-
-`uv` / `powercontext` 不会把本插件装进 Harness。
-
-可选确认：
-
-```bash
-dsh --profile web --dump-config
-```
-
-输出中应有 `id: powercontext-dsh`。
-
-卸载：
-
-```bash
-dsh plugin --profile web remove powercontext-dsh
-```
+`live` 必须成功。`ready` 在未配置推理模型时可以为 `degraded`。显式写入 Memory 不需要模型。
 
 ### 使用
 
@@ -170,16 +177,20 @@ dsh web
 
 ## 开发
 
-HTTP 操作表由本仓库的 [`openapi/powercontext.yaml`](openapi/powercontext.yaml) 生成。Server 契约变更后更新该文件（或设置 `POWERCONTEXT_OPENAPI`），再执行 `pnpm build`。
+HTTP 操作表由 PowerContext 的 `openapi/powercontext.yaml` 生成。把 `POWERCONTEXT_ROOT` 或 `POWERCONTEXT_OPENAPI` 指到主仓库，再执行 `pnpm gen`。`pnpm gen:check` 会在 `src/operations.generated.ts` 过期时失败。
 
 ```bash
 pnpm install
+pnpm gen:check
 pnpm test
+pnpm test:e2e
 pnpm build
 ```
 
+`pnpm test:e2e` 会从 `POWERCONTEXT_ROOT` 启动本地 Server，并打通 liveness、readiness、remember、search、prepare、capture。它不启动 DeepSeek Harness，也不需要模型。
+
 - 推到 `main` / `master`：跑 `pnpm test` 和 `pnpm build`，并检查 `lib/` 与生成表已提交。
-- Pull Request：只跑 `pnpm test`。
+- Pull Request：跑 `pnpm test` 和 `pnpm gen:check`。
 - GitHub Release 需手动触发：Actions → **Release** → Run workflow，填写例如 `0.1.0`。产物是 `powercontext-dsh-X.Y.Z.tgz`。
 
 ## 许可证

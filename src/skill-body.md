@@ -39,7 +39,8 @@ milestone.
 
 Call `pc_remember` only when the user explicitly asks to persist context. Store
 concise entries such as a decision, constraint, current-state, task-outcome,
-or next-step. Never store secrets or credentials.
+or next-step. Never store secrets or credentials. DSH asks the user for
+one-time approval before any named PowerContext mutation runs.
 
 Before `pc_memory_revise` or `pc_memory_retire`, read the current entry and
 pass its exact `citation`. After a 409 conflict, refresh the head and retry
@@ -49,11 +50,8 @@ once only if the user's requested change still applies.
 
 Do not approve, reject, or revise artifact candidates unless the user
 explicitly asked. Prefer the human command `/pc review approve` /
-`/pc review reject`. `pc_call` can reach those operations, but must not use
-them silently.
-
-Remaining OpenAPI operations are available through `pc_call` with
-`operation_id` and a payload object. `scope_id` is injected automatically.
+`/pc review reject`. Review mutations, destructive operations, and administrative
+operations are not exposed as model tools.
 
 ## Degrade safely
 

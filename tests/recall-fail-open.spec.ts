@@ -17,7 +17,10 @@ const config: ResolvedConfig = {
 
 function input(overrides: Partial<RecallInput> = {}): RecallInput {
   return {
-    messages: [{ content: [{ type: 'text', text: 'remember the public API stays async' }] }],
+    messages: [{
+      content: [{ type: 'text', text: 'remember the public API stays async' }],
+      source: { kind: 'user' },
+    }],
     next: async () => ({ kind: 'enter', messages: [] }),
     cwd: '/repo',
     sessionId: 's1',
@@ -64,6 +67,125 @@ describe('runRecallPreStep fail-open', () => {
       messages: [],
     })
     expect(next).toHaveBeenCalledOnce()
+  })
+
+  it('does not call next again when wrapContent throws after a successful step', async () => {
+    const next = vi.fn(async () => ({ kind: 'enter' as const, messages: [{ id: 'user' }] }))
+    const content = 'Public API stays async.'
+    const request = vi.fn(async (operationId: string) => {
+      if (operationId === 'prepare_context') {
+        return {
+          kind: 'json' as const,
+          value: {
+            schema: 'powercontext.prepared-context.v1',
+            status: 'ready',
+            content,
+            content_bytes: Buffer.byteLength(content, 'utf8'),
+          },
+          status: 200,
+          requestId: undefined,
+        }
+      }
+      return { kind: 'json' as const, value: { status: 'accepted', position: 1 }, status: 202, requestId: undefined }
+    })
+    const result = await runRecallPreStep(input({
+      next,
+      client: { request } as never,
+      wrapContent: () => {
+        throw new Error('wrap failed')
+      },
+    }))
+    expect(next).toHaveBeenCalledOnce()
+    expect(result).toEqual({ kind: 'enter', messages: [{ id: 'user' }] })
+  })
+
+  it('skips capture when POWERCONTEXT_DSH_CAPTURE_PROMPTS is disabled', async () => {
+    const request = vi.fn(async (operationId: string) => {
+      if (operationId === 'prepare_context') {
+        return {
+          kind: 'json' as const,
+          value: {
+            schema: 'powercontext.prepared-context.v1',
+            status: 'empty',
+            content: null,
+            content_bytes: 0,
+          },
+          status: 200,
+          requestId: undefined,
+        }
+      }
+      throw new Error(`unexpected ${operationId}`)
+    })
+    await runRecallPreStep(input({
+      client: { request } as never,
+      config: { ...config, capturePrompts: false },
+    }))
+    expect(request.mock.calls.map((call) => call[0])).toEqual(['prepare_context'])
+  })
+
+  it('recalls from the full batch but captures only explicitly user-originated messages', async () => {
+    const request = vi.fn(async (operationId: string) => {
+      if (operationId === 'prepare_context') {
+        return {
+          kind: 'json' as const,
+          value: {
+            schema: 'powercontext.prepared-context.v1',
+            status: 'empty',
+            content: null,
+            content_bytes: 0,
+          },
+          status: 200,
+          requestId: undefined,
+        }
+      }
+      return { kind: 'json' as const, value: { status: 'accepted', position: 1 }, status: 202, requestId: undefined }
+    })
+    await runRecallPreStep(input({
+      client: { request } as never,
+      messages: [
+        { content: [{ type: 'text', text: 'Human request' }], source: { kind: 'user' } },
+        {
+          content: [{ type: 'text', text: 'Plugin-provided context' }],
+          source: { kind: 'plugin', plugin: 'example-context', form: 'recall' },
+        },
+      ],
+    }))
+
+    expect(request).toHaveBeenCalledTimes(2)
+    expect(request.mock.calls[0]).toEqual([
+      'prepare_context',
+      { scope_id: 'project:demo', query: 'Human request\n\nPlugin-provided context', max_bytes: 8000 },
+      undefined,
+    ])
+    expect(request.mock.calls[1][0]).toBe('capture_content_source')
+    expect(request.mock.calls[1][1]).toMatchObject({
+      scope_id: 'project:demo',
+      content: 'Human request',
+      metadata: { origin: 'dsh', event: 'user_prompt_submit' },
+    })
+  })
+
+  it('does not capture a batch that contains only plugin-originated context', async () => {
+    const request = vi.fn(async () => ({
+      kind: 'json' as const,
+      value: {
+        schema: 'powercontext.prepared-context.v1',
+        status: 'empty',
+        content: null,
+        content_bytes: 0,
+      },
+      status: 200,
+      requestId: undefined,
+    }))
+    await runRecallPreStep(input({
+      client: { request } as never,
+      messages: [{
+        content: [{ type: 'text', text: 'Plugin-only context' }],
+        source: { kind: 'plugin', plugin: 'example-context' },
+      }],
+    }))
+
+    expect(request.mock.calls.map((call) => call[0])).toEqual(['prepare_context'])
   })
 
   it('appends untrusted context after a ready prepare result', async () => {

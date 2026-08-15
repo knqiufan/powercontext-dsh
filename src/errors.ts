@@ -1,8 +1,10 @@
 export const REQUEST_ID_HEADER = 'X-PowerContext-Request-ID'
 export const MAX_RESPONSE_BYTES = 1_048_576
-export const MAX_CONTEXT_BYTES = 8_000
+export const MAX_CONTEXT_BYTES = 32_768
 export const MAX_SOURCE_LENGTH = 200_000
 export const PLUGIN_NAME = 'powercontext-dsh'
+export const PLUGIN_VERSION = '0.0.2'
+export const PLUGIN_USER_AGENT = `${PLUGIN_NAME}/${PLUGIN_VERSION}`
 
 export class ClientError extends Error {
   readonly requestId: string | undefined

@@ -1,6 +1,9 @@
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
 import { PowerContextClient } from '../src/client.ts'
-import { ServerResponseError, UnavailableError, UnknownOperationError } from '../src/errors.ts'
+import { PLUGIN_USER_AGENT, PLUGIN_VERSION, ServerResponseError, UnavailableError, UnknownOperationError } from '../src/errors.ts'
 
 function jsonResponse(status: number, body: unknown, headers?: Record<string, string>): Response {
   return new Response(JSON.stringify(body), {
@@ -10,6 +13,12 @@ function jsonResponse(status: number, body: unknown, headers?: Record<string, st
 }
 
 describe('PowerContextClient', () => {
+  it('keeps the User-Agent version aligned with package.json', () => {
+    const manifest = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'package.json'), 'utf8'))
+    expect(PLUGIN_VERSION).toBe(manifest.version)
+    expect(PLUGIN_USER_AGENT).toBe(`powercontext-dsh/${manifest.version}`)
+  })
+
   it('POSTs JSON for remember_memory and sends Authorization', async () => {
     const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
       expect(url).toBe('http://127.0.0.1:8000/v1/memory/remember')
@@ -17,6 +26,7 @@ describe('PowerContextClient', () => {
       expect(init?.redirect).toBe('manual')
       const headers = new Headers(init?.headers)
       expect(headers.get('Authorization')).toBe('Bearer token')
+      expect(headers.get('User-Agent')).toBe('powercontext-dsh/0.0.2')
       expect(JSON.parse(String(init?.body))).toEqual({ scope_id: 'project:demo', kind: 'decision', text: 'keep API async' })
       return jsonResponse(200, { entry: { text: 'keep API async' } }, { 'X-PowerContext-Request-ID': 'req-1' })
     })

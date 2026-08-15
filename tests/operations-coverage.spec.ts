@@ -1,15 +1,12 @@
 import { readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { parse } from 'yaml'
 import { describe, expect, it } from 'vitest'
 import { parseOperations } from '../scripts/openapi-ops.mjs'
+import { resolveOpenApiPath } from '../scripts/sync-openapi.mjs'
 import { OPERATION_IDS, OPERATIONS } from '../src/operations.generated.ts'
 
-const yamlPath = join(dirname(fileURLToPath(import.meta.url)), '..', 'openapi', 'powercontext.yaml')
-
 function loadYamlDoc() {
-  return parse(readFileSync(yamlPath, 'utf8'))
+  return parse(readFileSync(resolveOpenApiPath(), 'utf8'))
 }
 
 describe('operations coverage', () => {

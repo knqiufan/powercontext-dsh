@@ -3,9 +3,14 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
-function profileModulesAnchor(): string {
-  const home = process.env.DSH_HOME?.trim() || join(homedir(), '.dsh')
-  return join(home, 'profiles', 'node_modules', 'powercontext-dsh-resolver.cjs')
+export function profileNodeModulesDir(env: NodeJS.ProcessEnv = process.env): string {
+  const home = env.DSH_HOME?.trim() || join(homedir(), '.dsh')
+  const profile = env.DSH_PROFILE?.trim() || 'web'
+  return join(home, 'profiles', profile, 'node_modules')
+}
+
+function profileModulesAnchor(env: NodeJS.ProcessEnv = process.env): string {
+  return join(profileNodeModulesDir(env), 'powercontext-dsh-resolver.cjs')
 }
 
 function resolvePeer(specifier: string): string {

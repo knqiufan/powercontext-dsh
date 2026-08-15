@@ -1,6 +1,7 @@
 import {
   InvalidResponseError,
   MAX_RESPONSE_BYTES,
+  PLUGIN_USER_AGENT,
   REQUEST_ID_HEADER,
   ServerResponseError,
   TransportError,
@@ -24,7 +25,7 @@ export interface ClientOptions {
   fetch?: FetchFn
 }
 
-function combineSignals(signals: AbortSignal[]): AbortSignal {
+export function combineSignals(signals: AbortSignal[]): AbortSignal {
   const present = signals.filter(Boolean)
   if (typeof AbortSignal.any === 'function') return AbortSignal.any(present)
   const controller = new AbortController()
@@ -149,7 +150,7 @@ export class PowerContextClient {
   private buildInit(spec: OperationSpec, payload: JsonObject | undefined, signal?: AbortSignal): RequestInit {
     const headers: Record<string, string> = {
       Accept: 'application/json',
-      'User-Agent': 'powercontext-dsh/0.0.1',
+      'User-Agent': PLUGIN_USER_AGENT,
     }
     if (this.authorization) headers.Authorization = this.authorization
     const init: RequestInit = {

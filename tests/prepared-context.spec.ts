@@ -32,15 +32,22 @@ describe('validatePreparedContext', () => {
     expect(() => validatePreparedContext({ ...ready, schema: 'other' })).toThrow(InvalidResponseError)
   })
 
-  it('rejects byte-count mismatch and oversized content', () => {
+  it('rejects byte-count mismatch and content above the requested max', () => {
     expect(() => validatePreparedContext({ ...ready, content_bytes: 1 })).toThrow(InvalidResponseError)
     const huge = 'x'.repeat(8001)
+    const bytes = Buffer.byteLength(huge, 'utf8')
     expect(() => validatePreparedContext({
       schema: PREPARED_CONTEXT_SCHEMA,
       status: 'ready',
       content: huge,
-      content_bytes: Buffer.byteLength(huge, 'utf8'),
-    })).toThrow(InvalidResponseError)
+      content_bytes: bytes,
+    }, '/v1/context/prepare', 8000)).toThrow(InvalidResponseError)
+    expect(validatePreparedContext({
+      schema: PREPARED_CONTEXT_SCHEMA,
+      status: 'ready',
+      content: huge,
+      content_bytes: bytes,
+    }, '/v1/context/prepare', 16000)).toMatchObject({ status: 'ready', content_bytes: bytes })
   })
 
   it('rejects empty status with leftover content', () => {
