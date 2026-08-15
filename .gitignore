@@ -4,3 +4,4 @@ coverage/
 .repro-*/
 .DS_Store
 *.log
+docs/
