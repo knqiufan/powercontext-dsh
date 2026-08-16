@@ -4,6 +4,8 @@
 
 DeepSeek Harness plugin that connects to a running [PowerContext](https://github.com/oceanbase/powercontext) Server over HTTP for recall, memory, handoff, experience, and skills. It does not embed storage, start the Server, or import the Python package.
 
+The same plugin is also integrated into official PowerContext at [`integrations/dsh/plugins/powercontext`](https://github.com/oceanbase/powercontext/tree/master/integrations/dsh/plugins/powercontext). This standalone repository and the in-tree plugin stay in sync: fixes and improvements land in both places.
+
 ```bash
 dsh plugin --profile web add <path-or-tarball>
 ```

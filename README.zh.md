@@ -4,6 +4,8 @@
 
 DeepSeek Harness 插件：通过 HTTP 接入正在运行的 [PowerContext](https://github.com/oceanbase/powercontext) Server，覆盖召回、记忆、交接、经验与技能。本仓库不嵌入存储、不启动 Server，也不 `import` Python 包。
 
+该插件也已集成到 PowerContext 官方仓库（[`integrations/dsh/plugins/powercontext`](https://github.com/oceanbase/powercontext/tree/master/integrations/dsh/plugins/powercontext)）。本独立仓库与官方内部插件会同步优化和更新。
+
 ```bash
 dsh plugin --profile web add <path-or-tarball>
 ```
