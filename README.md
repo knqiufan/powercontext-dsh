@@ -67,7 +67,7 @@ dsh plugin --profile web add /path/to/powercontext/integrations/dsh/plugins/powe
 This standalone repository remains a release channel. A GitHub Release tarball still works:
 
 ```bash
-dsh plugin --profile web add ./powercontext-dsh-0.0.3.tgz
+dsh plugin --profile web add ./powercontext-dsh-0.0.4.tgz
 ```
 
 If the plugin is already installed from a source checkout, remove it first. On Windows, replacing a `link:` install with a tarball fails because pnpm tries to recreate nested `node_modules` symlinks.
