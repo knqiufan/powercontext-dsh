@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { UnavailableError } from '../src/errors.ts'
 import { runRecallPreStep, type RecallInput } from '../src/recall.ts'
 import type { ResolvedConfig } from '../src/config.ts'
+import { deriveScopeId } from '../src/scope.ts'
 
 const config: ResolvedConfig = {
   baseUrl: 'http://127.0.0.1:8000',
@@ -186,6 +187,61 @@ describe('runRecallPreStep fail-open', () => {
     }))
 
     expect(request.mock.calls.map((call) => call[0])).toEqual(['prepare_context'])
+  })
+
+  it('skips recall and capture when cwd is missing and scopeId is not configured', async () => {
+    const next = vi.fn(async () => ({ kind: 'enter' as const, messages: [{ id: 'user' }] }))
+    const request = vi.fn(async () => {
+      throw new Error('PowerContext must not be called without a project scope')
+    })
+    const log = vi.fn()
+    const result = await runRecallPreStep(input({
+      next,
+      cwd: undefined,
+      client: { request } as never,
+      config: { ...config, scopeId: undefined },
+      resolveScope: (cwd) => deriveScopeId(cwd),
+      log,
+    }))
+    expect(next).toHaveBeenCalledOnce()
+    expect(result).toEqual({ kind: 'enter', messages: [{ id: 'user' }] })
+    expect(request).not.toHaveBeenCalled()
+    expect(log).toHaveBeenCalledWith({
+      event: 'context_prepare',
+      outcome: 'skipped',
+      reason: 'missing_session_cwd',
+    })
+  })
+
+  it('recalls with configured scopeId and does not write process cwd into Source', async () => {
+    const request = vi.fn(async (operationId: string) => {
+      if (operationId === 'prepare_context') {
+        return {
+          kind: 'json' as const,
+          value: {
+            schema: 'powercontext.prepared-context.v1',
+            status: 'empty',
+            content: null,
+            content_bytes: 0,
+          },
+          status: 200,
+          requestId: undefined,
+        }
+      }
+      return { kind: 'json' as const, value: { status: 'accepted', position: 1 }, status: 202, requestId: undefined }
+    })
+    await runRecallPreStep(input({
+      cwd: undefined,
+      client: { request } as never,
+      resolveScope: (cwd) => deriveScopeId(cwd, { configuredScopeId: 'project:demo' }),
+    }))
+    expect(request.mock.calls[0][0]).toBe('prepare_context')
+    expect(request.mock.calls[1][0]).toBe('capture_content_source')
+    expect(request.mock.calls[1][1]).toMatchObject({
+      scope_id: 'project:demo',
+      metadata: { origin: 'dsh', event: 'user_prompt_submit', session_id: 's1' },
+    })
+    expect((request.mock.calls[1][1] as { metadata: { cwd?: string } }).metadata.cwd).toBeUndefined()
   })
 
   it('appends untrusted context after a ready prepare result', async () => {

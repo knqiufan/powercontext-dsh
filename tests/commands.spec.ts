@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { handlePcCommand } from '../src/commands.ts'
+import { handlePcCommand, registerCommands } from '../src/commands.ts'
 import { PowerContextClient } from '../src/client.ts'
 import type { PluginRuntime } from '../src/invoke.ts'
 import { resolveConfig } from '../src/config.ts'
 import { buildSourceId } from '../src/capture.ts'
+import { deriveScopeId } from '../src/scope.ts'
 
 function runtime(fetchImpl: typeof fetch): PluginRuntime {
   const config = resolveConfig({ baseUrl: 'http://127.0.0.1:8000' })
@@ -26,6 +27,53 @@ describe('handlePcCommand', () => {
     const result = await handlePcCommand('review approve only-id', runtime(async () => new Response('{}')), 'project:demo')
     expect(result.kind).toBe('error')
     expect(result.text).toContain('Usage: /pc review approve')
+  })
+})
+
+describe('registerCommands missing session cwd', () => {
+  function registerHandler(pluginRuntime: PluginRuntime) {
+    let handler: ((invocation: {
+      rawInput: string
+      signal: AbortSignal
+      agent: { session: { header: { cwd?: string } } }
+    }) => Promise<{ kind: string; text: string }>) | undefined
+    registerCommands({
+      get: (name) => name === 'commands'
+        ? { register: (definition: { handler: typeof handler }) => { handler = definition.handler } }
+        : undefined,
+    }, pluginRuntime)
+    if (!handler) throw new Error('expected /pc handler')
+    return handler
+  }
+
+  it('does not throw when cwd is missing and scopeId is not configured', async () => {
+    const pluginRuntime = runtime(async () => new Response('{}'))
+    pluginRuntime.config = { ...pluginRuntime.config, scopeId: undefined }
+    pluginRuntime.resolveScope = (cwd) => deriveScopeId(cwd)
+    const handler = registerHandler(pluginRuntime)
+    await expect(handler({
+      rawInput: '',
+      signal: AbortSignal.timeout(1000),
+      agent: { session: { header: {} } },
+    })).resolves.toMatchObject({
+      kind: 'error',
+      text: expect.stringContaining('scopeId'),
+    })
+  })
+
+  it('uses configured scopeId when cwd is missing', async () => {
+    const pluginRuntime = runtime(async () => new Response('{}'))
+    pluginRuntime.config = { ...pluginRuntime.config, scopeId: 'project:demo' }
+    pluginRuntime.resolveScope = (cwd) => deriveScopeId(cwd, { configuredScopeId: 'project:demo' })
+    const handler = registerHandler(pluginRuntime)
+    await expect(handler({
+      rawInput: '',
+      signal: AbortSignal.timeout(1000),
+      agent: { session: { header: { cwd: undefined } } },
+    })).resolves.toMatchObject({
+      kind: 'success',
+      text: expect.stringContaining('scope=project:demo'),
+    })
   })
 })
 
